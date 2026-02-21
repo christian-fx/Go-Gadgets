@@ -1,46 +1,54 @@
-import Home from './pages/Home.js';
-import Login from './pages/Login.js';
-import Cart from './pages/Cart.js';
-import Checkout from './pages/Checkout.js';
-import Account from './pages/Account.js';
+// src/router.js
+export class Router {
+    constructor(routes) {
+        this.routes = routes;
+        this.appElement = document.getElementById('app');
 
-const routes = {
-    '/': Home,
-    '/login': Login,
-    '/cart': Cart,
-    '/checkout': Checkout,
-    '/account': Account
-};
-
-export const navigateTo = (url) => {
-    history.pushState(null, null, url);
-    router();
-};
-
-export const router = async () => {
-    const path = location.pathname;
-    let pageComponent = routes[path] || Home; // fallback to home for now
-
-    const view = document.getElementById('router-view');
-
-    // Clean up old events if needed, but since it's vanilla, we just replace HTML
-    view.innerHTML = await pageComponent.render();
-
-    if (pageComponent.afterRender) {
-        await pageComponent.afterRender();
+        // Add event listener for browser back/forward buttons
+        window.addEventListener('popstate', () => this.handleRoute());
     }
-};
 
-export const initRouter = () => {
-    window.addEventListener('popstate', router);
+    init() {
+        // Intercept link clicks globally
+        document.body.addEventListener('click', (e) => {
+            if (e.target.matches('[data-link]')) {
+                e.preventDefault();
+                this.navigate(e.target.getAttribute('href'));
+            }
+        });
+        this.handleRoute();
+    }
 
-    document.body.addEventListener('click', e => {
-        if (e.target.matches('[data-link]') || e.target.closest('[data-link]')) {
-            e.preventDefault();
-            const target = e.target.matches('[data-link]') ? e.target : e.target.closest('[data-link]');
-            navigateTo(target.href);
+    navigate(url) {
+        window.history.pushState(null, null, url);
+        this.handleRoute();
+    }
+
+    async handleRoute() {
+        const path = window.location.pathname;
+        let routeMatch = this.routes.find(r => r.path === path);
+
+        if (!routeMatch) {
+            // Default to 404 or home. Here defaulting to Home if not found.
+            routeMatch = this.routes.find(r => r.path === '/');
         }
-    });
 
-    router();
-};
+        try {
+            // Render layout outer wrapper (e.g. Navbar)
+            // Call the component to render the page
+            const content = await routeMatch.component();
+            this.appElement.innerHTML = content;
+
+            // After rendering, scroll to top
+            window.scrollTo(0, 0);
+
+            // Re-initialize any page specific JS if necessary
+            if (routeMatch.onMount) {
+                routeMatch.onMount();
+            }
+        } catch (e) {
+            console.error("Router error rendering component", e);
+            this.appElement.innerHTML = `<div class="p-10 text-center"><h1 class="text-2xl text-red-500">Error rendering page.</h1></div>`;
+        }
+    }
+}
