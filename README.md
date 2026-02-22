@@ -63,5 +63,15 @@ You will also need a Firebase project set up with **Authentication** (Email/Pass
 *   `src/pages/` - Contains the logic and HTML templates for each route (`Home.js`, `Store.js`, `Product.js`, `Account.js`, `Auth.js`, `Checkout.js`, `Cart.js`).
 *   `src/style.css` - Global Tailwind imports and custom CSS rules.
 
+## Deployment (Vercel)
+This project is pre-configured for instant deployment on [Vercel](https://vercel.com/). 
+
+Because it is a Single Page Application (SPA), a `vercel.json` file is included at the root to rewrite all page requests to `index.html`.
+
+1. **Push your code to GitHub/GitLab**.
+2. **Import the repository into Vercel**.
+3. **Configure Environment Variables**: During the import step, expand the "Environment Variables" section and paste all of your `VITE_FIREBASE_*` keys mapping to your Firebase config.
+4. **Deploy!** Vercel will automatically detect Vite and run `npm run build` by default.
+
 ## License
 This project is open-source and available under the MIT License.
