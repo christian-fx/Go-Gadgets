@@ -5,6 +5,8 @@ import { renderStore, onStoreMount } from './pages/Store.js';
 import { renderCart, onCartMount } from './pages/Cart.js';
 import { renderCheckout, onCheckoutMount } from './pages/Checkout.js';
 import { renderAccount, onAccountMount } from './pages/Account.js';
+import { renderAuth, onAuthMount } from './pages/Auth.js';
+import { renderProduct, onProductMount } from './pages/Product.js';
 import './style.css'; // Tailwind CSS entry
 
 // Initialize routing
@@ -13,14 +15,18 @@ const routes = [
     { path: '/store', component: renderStore, onMount: onStoreMount },
     { path: '/cart', component: renderCart, onMount: onCartMount },
     { path: '/checkout', component: renderCheckout, onMount: onCheckoutMount },
-    { path: '/account', component: renderAccount, onMount: onAccountMount }
+    { path: '/account', component: renderAccount, onMount: onAccountMount },
+    { path: '/auth', component: renderAuth, onMount: onAuthMount },
+    { path: '/product', component: renderProduct, onMount: onProductMount }
 ];
 
 const router = new Router(routes);
-router.init();
-
 // Export router to be accessible globally if needed
 window.router = router;
+
+store.initAuthListener(() => {
+    router.init();
+});
 
 // Global Cart UI Updates
 store.subscribe((state) => {
@@ -34,14 +40,20 @@ store.subscribe((state) => {
             badge.classList.add('hidden');
         }
     }
+
+    const profileLink = document.getElementById('nav-profile-link');
+    if (profileLink) {
+        profileLink.href = state.user.isLoggedIn ? '/account' : '/auth';
+    }
 });
 
 // Global "Add to Cart" Handling with visual feedback
 document.body.addEventListener('click', (e) => {
     const addToCartBtn = e.target.closest('[data-add-to-cart]');
     if (addToCartBtn) {
-        const productId = parseInt(addToCartBtn.getAttribute('data-add-to-cart'));
-        const product = store.getState().products.find(p => p.id === productId);
+        const productId = addToCartBtn.getAttribute('data-add-to-cart');
+        const product = store.getState().products.find(p => String(p.id) === String(productId))
+            || window.__CURRENT_PRODUCT__; // Fallback for Product.js isolated loads
 
         if (product) {
             store.dispatch({ type: 'ADD_TO_CART', payload: product });

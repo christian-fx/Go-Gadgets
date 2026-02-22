@@ -1,5 +1,8 @@
 // src/store.js
 // A simple reactive store using listeners
+import { auth, db } from './api/firebase-config.js';
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 const loadCartFromStorage = () => {
     try {
@@ -14,20 +17,11 @@ const state = {
     cart: loadCartFromStorage(),
     user: {
         isLoggedIn: false,
-        name: 'Priya Patel', // Mock data
-        email: 'priya.p@example.com'
+        name: null,
+        email: null,
+        phone: null
     },
-    products: [
-        { id: 1, name: 'Sonic Pro X Wireless', category: 'Audio', price: 299.00, image: 'https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80', description: 'Color: Matte Black, Warranty: 1 Year Standard' },
-        { id: 2, name: 'Vision VR Headset', category: 'Gaming', price: 499.00, image: 'https://images.unsplash.com/photo-1622979135225-d2ba269cf1ac?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80' },
-        { id: 3, name: 'SkyStream 4 Drone', category: 'Drones', price: 899.00, image: 'https://images.unsplash.com/photo-1507582020474-9a35b7d455d9?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80' },
-        { id: 4, name: 'Echo Bass Speaker', category: 'Smart Home', price: 129.00, image: 'https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80' },
-        { id: 5, name: 'RGB Mech Keyboard', category: 'Gaming', price: 99.00, originalPrice: 149.00, image: 'https://images.unsplash.com/photo-1595225476474-87563907a212?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80', badge: 'SALE' },
-        { id: 6, name: 'Phone X Pro', category: 'Smartphones', price: 999.00, image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80' },
-        { id: 7, name: 'FitBand Active', category: 'Wearables', price: 79.00, image: 'https://images.unsplash.com/photo-1575311373937-040b8e1fd5b0?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80' },
-        { id: 8, name: 'AirBuds True Wireless', category: 'Audio', price: 159.00, image: 'https://images.unsplash.com/photo-1606220588913-b3eea41b6d0c?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80' },
-        { id: 9, name: 'ActionCam 5K', category: 'Cameras', price: 349.00, image: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80', description: 'Bundle: Adventure Kit, SD Card: 64GB Included' },
-    ],
+    products: [],
 };
 
 const listeners = [];
@@ -71,10 +65,33 @@ export const store = {
                 state.cart = [];
                 break;
             case 'LOGIN':
-                state.user.isLoggedIn = true;
+                state.user = {
+                    isLoggedIn: true,
+                    ...action.payload
+                };
                 break;
             case 'LOGOUT':
-                state.user.isLoggedIn = false;
+                signOut(auth).catch(err => console.error(err));
+                state.user = {
+                    isLoggedIn: false,
+                    name: null,
+                    email: null,
+                    phone: null,
+                    uid: null
+                };
+                window.router.navigate('/');
+                break;
+            case 'LOGOUT_SILENT':
+                state.user = {
+                    isLoggedIn: false,
+                    name: null,
+                    email: null,
+                    phone: null,
+                    uid: null
+                };
+                break;
+            case 'SET_PRODUCTS':
+                state.products = action.payload;
                 break;
         }
 
@@ -86,5 +103,55 @@ export const store = {
         }
 
         listeners.forEach(listener => listener(state));
+    },
+
+    initAuthListener(onInitCallback) {
+        let initialized = false;
+        const completeInit = () => {
+            if (!initialized && onInitCallback) {
+                initialized = true;
+                onInitCallback();
+            }
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                    const docSnap = await getDoc(doc(db, "users", user.uid));
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        this.dispatch({
+                            type: 'LOGIN',
+                            payload: {
+                                name: data.name,
+                                email: user.email,
+                                phone: data.phone,
+                                uid: user.uid,
+                                emailVerified: user.emailVerified
+                            }
+                        });
+                    } else {
+                        // Fallback if document doesn't exist
+                        this.dispatch({
+                            type: 'LOGIN',
+                            payload: {
+                                name: 'User',
+                                email: user.email,
+                                phone: null,
+                                uid: user.uid,
+                                emailVerified: user.emailVerified
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error fetching user data:", error);
+                } finally {
+                    completeInit();
+                }
+            } else {
+                this.dispatch({ type: 'LOGOUT_SILENT' });
+                completeInit();
+            }
+        });
     }
 };

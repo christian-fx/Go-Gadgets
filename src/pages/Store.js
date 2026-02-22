@@ -3,19 +3,60 @@ import { renderNavbar } from '../components/Navbar.js';
 import { renderFooter } from '../components/Footer.js';
 import { renderProductCard } from '../components/ProductCard.js';
 import { store } from '../store.js';
+import { db } from '../api/firebase-config.js';
+import { collection, onSnapshot, getDocs } from "firebase/firestore";
+
+let allProducts = [];
+let unsubscribeProducts = null;
+let currentCategoryFilter = 'All';
+
+// 1. Fetch Categories
+async function loadCategories() {
+  try {
+    const snapshot = await getDocs(collection(db, "categories"));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (e) {
+    console.error("Failed to load categories:", e);
+    return [];
+  }
+}
+
+// 2. Fetch Products (Real-time)
+function initStore(renderCallback) {
+  if (unsubscribeProducts) unsubscribeProducts();
+  unsubscribeProducts = onSnapshot(collection(db, "products"), (snapshot) => {
+    allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    store.dispatch({ type: 'SET_PRODUCTS', payload: allProducts }); // Sync global store
+    renderCallback(filterByCategory(currentCategoryFilter));
+  });
+}
+
+// 3. Filter Logic
+function filterByCategory(categoryName) {
+  if (categoryName === 'All') return allProducts;
+  return allProducts.filter(p => p.category === categoryName);
+}
 
 export async function renderStore() {
-    const state = store.getState();
-    const products = state.products;
+  const categories = await loadCategories();
+  // Default mock categories if DB is empty
+  const displayCats = categories.length > 0 ? categories : [
+    { id: '1', name: 'Smartphones' },
+    { id: '2', name: 'Audio' },
+    { id: '3', name: 'Wearables' },
+    { id: '4', name: 'Gaming' },
+    { id: '5', name: 'Cameras' },
+    { id: '6', name: 'Smart Home' }
+  ];
 
-    return `
+  return `
     ${renderNavbar()}
     <main class="flex-grow bg-white">
       <div class="max-w-7xl mx-auto px-6 py-8">
         
         <!-- Top Bar -->
         <div class="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
-          <p class="text-sm text-gray-500">Showing ${products.length} products</p>
+          <p class="text-sm text-gray-500">Showing All products</p>
           <div class="flex items-center gap-2">
             <label class="text-sm font-medium text-gray-700">Sort by:</label>
             <select class="text-sm border-none bg-transparent focus:ring-0 cursor-pointer font-medium text-gray-900 pr-8">
@@ -30,38 +71,19 @@ export async function renderStore() {
         <div class="flex flex-col md:flex-row gap-10">
           <!-- Sidebar -->
           <aside class="w-full md:w-64 flex-shrink-0">
-            <!-- Categories -->
             <div class="mb-8">
               <h3 class="font-bold text-gray-900 mb-4">Categories</h3>
-              <div class="space-y-3">
+              <div class="space-y-3" id="category-filters">
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
-                  <span class="text-sm text-[#00c5df] font-medium">All Products</span>
+                  <input type="radio" name="categoryFilter" value="All" checked class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
+                  <span class="text-sm font-medium text-gray-900">All Products</span>
                 </label>
-                <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
-                  <span class="text-sm text-gray-600 hover:text-gray-900">Smartphones</span>
-                </label>
-                <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
-                  <span class="text-sm text-gray-600 hover:text-gray-900">Audio & Sound</span>
-                </label>
-                <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
-                  <span class="text-sm text-gray-600 hover:text-gray-900">Wearables</span>
-                </label>
-                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
-                  <span class="text-sm text-gray-600 hover:text-gray-900">Gaming</span>
-                </label>
-                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
-                  <span class="text-sm text-gray-600 hover:text-gray-900">Cameras & Drones</span>
-                </label>
-                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
-                  <span class="text-sm text-gray-600 hover:text-gray-900">Smart Home</span>
-                </label>
+                ${displayCats.map(cat => `
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="radio" name="categoryFilter" value="${cat.name}" class="w-4 h-4 text-[#00c5df] rounded border-gray-300 focus:ring-[#00c5df]">
+                    <span class="text-sm text-gray-600 hover:text-gray-900">${cat.name}</span>
+                  </label>
+                `).join('')}
               </div>
             </div>
 
@@ -112,7 +134,10 @@ export async function renderStore() {
           <!-- Product Grid -->
           <div class="flex-grow">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12" id="store-product-grid">
-              ${products.map(p => renderProductCard(p)).join('')}
+              <div class="col-span-full py-12 text-center text-gray-500">
+                <svg class="animate-spin h-8 w-8 mx-auto text-[#00c5df] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <p>Loading products...</p>
+              </div>
             </div>
             
             <!-- Pagination -->
@@ -138,19 +163,31 @@ export async function renderStore() {
 }
 
 export function onStoreMount() {
-    const addToCartButtons = document.querySelectorAll('[data-add-to-cart]');
-    addToCartButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
-            const productId = parseInt(e.currentTarget.getAttribute('data-add-to-cart'));
-            const product = store.getState().products.find(p => p.id === productId);
-            if (product) {
-                store.dispatch({ type: 'ADD_TO_CART', payload: product });
-                document.getElementById('app').innerHTML += `<div class="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow transition-opacity duration-300 z-[100]" id="toast">Added to cart!</div>`;
-                setTimeout(() => {
-                    const toast = document.getElementById('toast');
-                    if (toast) toast.remove();
-                }, 2000);
-            }
-        });
+  const gridContainer = document.getElementById('store-product-grid');
+
+  // Callback to update Grid
+  const updateGrid = (productsToRender) => {
+    if (!gridContainer) return;
+
+    if (productsToRender.length === 0) {
+      gridContainer.innerHTML = `<div class="col-span-full py-12 text-center text-gray-500">No products found for this category.</div>`;
+      return;
+    }
+
+    gridContainer.innerHTML = productsToRender.map(p => renderProductCard(p)).join('');
+  };
+
+  // Initialize Firebase listener
+  initStore(updateGrid);
+
+  // Filter Logic Binding
+  const categoryRadios = document.querySelectorAll('input[name="categoryFilter"]');
+  categoryRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      currentCategoryFilter = e.target.value;
+      updateGrid(filterByCategory(currentCategoryFilter));
     });
+  });
+
+  // Add To Cart events are now handled globally in main.js, so we don't need to bind them here anymore.
 }

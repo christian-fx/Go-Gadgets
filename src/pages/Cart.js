@@ -4,11 +4,11 @@ import { renderFooter } from '../components/Footer.js';
 import { store } from '../store.js';
 
 export async function renderCart() {
-    const state = store.getState();
-    const cart = state.cart;
+  const state = store.getState();
+  const cart = state.cart;
 
-    if (cart.length === 0) {
-        return `
+  if (cart.length === 0) {
+    return `
       ${renderNavbar()}
       <main class="flex-grow bg-gray-50 flex items-center justify-center min-h-[60vh]">
         <div class="text-center">
@@ -20,14 +20,14 @@ export async function renderCart() {
       </main>
       ${renderFooter()}
     `;
-    }
+  }
 
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const tax = subtotal * 0.08; // 8% dummy tax
-    const total = subtotal + tax;
-    const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const tax = subtotal * 0.08; // 8% dummy tax
+  const total = subtotal + tax;
+  const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-    return `
+  return `
     ${renderNavbar()}
     <main class="flex-grow bg-gray-50/50 py-12">
       <div class="max-w-7xl mx-auto px-6">
@@ -38,20 +38,23 @@ export async function renderCart() {
           
           <!-- Cart Items -->
           <div class="flex-grow space-y-6">
-            ${cart.map(item => `
+            ${cart.map(item => {
+    const specsString = item.specs ? (Array.isArray(item.specs) ? item.specs.map(s => s.value).join(', ') : Object.values(item.specs).join(', ')) : (item.description || item.category || '');
+    const displayDesc = specsString.length > 50 ? specsString.substring(0, 47) + '...' : specsString;
+    return `
               <div class="bg-white p-6 rounded-xl border border-gray-100 flex gap-6 items-start shadow-sm">
-                <div class="w-24 h-24 rounded-lg bg-gray-50 flex-shrink-0 overflow-hidden">
-                  <img src="${item.image}" alt="${item.name}" class="w-full h-full object-cover">
+                <div class="w-24 h-24 rounded-lg bg-gray-50 flex-shrink-0 overflow-hidden p-2">
+                  <img src="${item.image}" alt="${item.name}" class="w-full h-full object-contain">
                 </div>
                 <div class="flex-grow flex flex-col sm:flex-row sm:justify-between gap-4">
                   <div>
                     <h3 class="font-bold text-gray-900">${item.name}</h3>
-                    <p class="text-sm text-gray-500 mt-1">${item.description || item.category}</p>
+                    <p class="text-sm text-gray-500 mt-1 max-w-sm line-clamp-2">${displayDesc}</p>
                     <div class="mt-4 flex items-center gap-4">
                        <div class="flex items-center border border-gray-200 rounded">
                          <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors" data-action="decrement" data-id="${item.id}">-</button>
                          <span class="w-10 text-center text-sm font-medium text-gray-900">${item.quantity}</span>
-                         <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors" data-action="increment" data-id="${item.id}">+</button>
+                         <button class="w-8 h-8 flex items-center justify-center ${item.stock !== undefined && item.quantity >= item.stock ? 'text-gray-300 cursor-not-allowed bg-gray-50' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'} transition-colors" data-action="${item.stock !== undefined && item.quantity >= item.stock ? '' : 'increment'}" data-id="${item.id}">+</button>
                        </div>
                     </div>
                   </div>
@@ -64,7 +67,8 @@ export async function renderCart() {
                   </div>
                 </div>
               </div>
-            `).join('')}
+            `;
+  }).join('')}
           </div>
 
           <!-- Order Summary -->
@@ -117,28 +121,28 @@ export async function renderCart() {
 }
 
 export function onCartMount() {
-    const container = document.querySelector('main');
-    if (!container) return;
+  const container = document.querySelector('main');
+  if (!container) return;
 
-    container.addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-action]');
-        if (!btn) return;
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
 
-        const action = btn.getAttribute('data-action');
-        const id = parseInt(btn.getAttribute('data-id'));
-        const item = store.getState().cart.find(i => i.id === id);
+    const action = btn.getAttribute('data-action');
+    const id = btn.getAttribute('data-id');
+    const item = store.getState().cart.find(i => String(i.id) === String(id));
 
-        if (item) {
-            if (action === 'increment') {
-                store.dispatch({ type: 'UPDATE_QUANTITY', payload: { id, quantity: item.quantity + 1 } });
-                window.router.handleRoute(); // re-render
-            } else if (action === 'decrement') {
-                store.dispatch({ type: 'UPDATE_QUANTITY', payload: { id, quantity: item.quantity - 1 } });
-                window.router.handleRoute(); // re-render
-            } else if (action === 'remove') {
-                store.dispatch({ type: 'REMOVE_FROM_CART', payload: { id } });
-                window.router.handleRoute(); // re-render
-            }
-        }
-    });
+    if (item) {
+      if (action === 'increment') {
+        store.dispatch({ type: 'UPDATE_QUANTITY', payload: { id, quantity: item.quantity + 1 } });
+        window.router.handleRoute(); // re-render
+      } else if (action === 'decrement') {
+        store.dispatch({ type: 'UPDATE_QUANTITY', payload: { id, quantity: item.quantity - 1 } });
+        window.router.handleRoute(); // re-render
+      } else if (action === 'remove') {
+        store.dispatch({ type: 'REMOVE_FROM_CART', payload: { id } });
+        window.router.handleRoute(); // re-render
+      }
+    }
+  });
 }
