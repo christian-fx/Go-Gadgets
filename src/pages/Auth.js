@@ -321,11 +321,19 @@ export function onAuthMount() {
         authAlert.classList.add('block', 'bg-green-50', 'text-green-700');
         authAlert.classList.remove('hidden');
 
-        // Redirection will be handled mostly by onAuthStateChanged, but we can do a hard navigate here
-        setTimeout(() => {
-          store.dispatch({ type: 'LOGIN', payload: { name, email, phone, uid: user.uid, emailVerified: user.emailVerified } });
-          window.router.navigate('/account');
-        }, 2500);
+        // Prevent them from auto-navigating to the backend if unverified.
+        // Clear the mock sign in token from Firebase auth state to keep them here.
+        import("firebase/auth").then(({ signOut }) => signOut(auth));
+
+        // Show Verification Modal natively
+        verificationModal.classList.remove('hidden');
+        requestAnimationFrame(() => {
+          verificationModal.classList.remove('opacity-0');
+          verificationModal.querySelector('div').classList.remove('scale-95');
+        });
+
+        // Temporarily store the email to allow resends
+        document.getElementById('email').setAttribute('data-unverified-user', true);
 
       } catch (error) {
         authAlert.textContent = translateAuthError(error);
@@ -345,7 +353,10 @@ export function onAuthMount() {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
         if (!userCredential.user.emailVerified) {
-          // Show Verification Modal instead of just an alert
+          // Sign them completely out of the local Firebase session to prevent store.js from caching them as logged in
+          import("firebase/auth").then(({ signOut }) => signOut(auth));
+
+          // Show Verification Modal
           authAlert.classList.add('hidden');
           submitBtn.disabled = false;
           submitBtn.textContent = 'Sign In with Email';

@@ -123,5 +123,5 @@ export async function renderProduct() {
 }
 
 export function onProductMount() {
-  console.log("Product detail page loaded");
+  // Product page initialized
 }
