@@ -257,19 +257,19 @@ export function onCheckoutMount() {
       alertBox.classList.add('hidden');
 
       if (!state.user.isLoggedIn) {
-        alertBox.textContent = 'Please log in or create an account to checkout.';
+        alertBox.textContent = 'Oops! Please log in or create an account before you can check out safely.';
         alertBox.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-green-50', 'text-green-700');
         alertBox.classList.add('block', 'bg-red-50', 'text-red-700');
-        setTimeout(() => window.router.navigate('/auth'), 1500);
+        setTimeout(() => window.router.navigate('/auth'), 2000);
         return;
       }
 
       // Check for verification (Google auth usually sets emailVerified to true)
       if (state.user.emailVerified === false) {
-        alertBox.textContent = 'Please verify your email address before checking out.';
+        alertBox.textContent = 'Hold on! You must verify your email address to complete a purchase. We are redirecting you...';
         alertBox.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-green-50', 'text-green-700');
-        alertBox.classList.add('block', 'bg-red-50', 'text-red-700');
-        setTimeout(() => window.router.navigate('/auth'), 2000);
+        alertBox.classList.add('block', 'bg-yellow-50', 'text-yellow-700');
+        setTimeout(() => window.router.navigate('/auth'), 2500);
         return;
       }
 
@@ -298,28 +298,35 @@ export function onCheckoutMount() {
 
         // 1. Transaction to Verify & Deduct Stock, Create Order, and Update Stats
         await runTransaction(db, async (transaction) => {
-          // Verify Stock First
+          // --- ALL READS FIRST ---
+
+          // Read all products
+          const productSnaps = [];
           for (const item of cartItems) {
             const productRef = doc(db, "products", item.id);
-            const productSnap = await transaction.get(productRef);
+            const snap = await transaction.get(productRef);
+            productSnaps.push({ snap, item, ref: productRef });
+          }
 
-            if (!productSnap.exists()) throw new Error(`Product ${item.name} removed!`);
+          // Read User Doc (for shipping address if needed, and for updating stats)
+          const userRef = doc(db, "users", uid);
+          const userSnap = await transaction.get(userRef);
 
-            const currentStock = productSnap.data().stock;
+          // --- VALIDATION & LOGIC ---
+
+          // Validate stock first before any writes
+          for (const { snap, item } of productSnaps) {
+            if (!snap.exists()) throw new Error(`Product ${item.name} removed!`);
+            const currentStock = snap.data().stock;
             if (currentStock < item.quantity) {
               throw new Error(`Not enough stock for ${item.name}! Only ${currentStock} left.`);
             }
-
-            // Deduct stock
-            transaction.update(productRef, { stock: currentStock - item.quantity });
           }
 
           // Build Shipping Address Object
           let finalShippingAddress;
           if (savedAddressSelect && savedAddressSelect.value !== 'new') {
-            // Retrieve the full address object from Firestore's snapshot by ID
-            const userDoc = await transaction.get(doc(db, "users", uid));
-            const addresses = userDoc.data().addresses || [];
+            const addresses = userSnap.exists() ? (userSnap.data().addresses || []) : [];
             finalShippingAddress = addresses.find(a => a.id === savedAddressSelect.value) || {};
           } else {
             // Construct from form
@@ -335,7 +342,15 @@ export function onCheckoutMount() {
           }
 
           // Build Customer Name
-          const customerName = prefillName || state.user.name || (formData.get('firstName') + ' ' + formData.get('lastName'));
+          const customerName = state.user.name || (formData.get('firstName') + ' ' + formData.get('lastName'));
+
+          // --- ALL WRITES NOW ---
+
+          // Deduct stock
+          for (const { snap, item, ref } of productSnaps) {
+            const currentStock = snap.data().stock;
+            transaction.update(ref, { stock: currentStock - item.quantity });
+          }
 
           // Create Order Record
           const newOrderRef = doc(collection(db, "orders"));
@@ -351,9 +366,6 @@ export function onCheckoutMount() {
           });
 
           // Update User Stats
-          const userRef = doc(db, "users", uid);
-          const userSnap = await transaction.get(userRef);
-
           if (userSnap.exists()) {
             const currentSpent = userSnap.data().totalSpent || 0;
             const currentOrders = userSnap.data().orders || 0;
