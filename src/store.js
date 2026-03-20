@@ -1,9 +1,9 @@
 // src/store.js
-// A simple reactive store using listeners
 import { auth, db } from './api/firebase-config.js';
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
+// Load cart from localStorage
 const loadCartFromStorage = () => {
     try {
         const saved = localStorage.getItem('goGadgetsCart');
@@ -19,7 +19,8 @@ const state = {
         isLoggedIn: false,
         name: null,
         email: null,
-        phone: null
+        phone: null,
+        uid: null
     },
     products: [],
 };
@@ -49,9 +50,11 @@ export const store = {
                     state.cart.push({ ...action.payload, quantity: 1 });
                 }
                 break;
+
             case 'REMOVE_FROM_CART':
                 state.cart = state.cart.filter(i => i.id !== action.payload.id);
                 break;
+
             case 'UPDATE_QUANTITY':
                 const item = state.cart.find(i => i.id === action.payload.id);
                 if (item) {
@@ -61,15 +64,18 @@ export const store = {
                     }
                 }
                 break;
+
             case 'CLEAR_CART':
                 state.cart = [];
                 break;
+
             case 'LOGIN':
                 state.user = {
                     isLoggedIn: true,
                     ...action.payload
                 };
                 break;
+
             case 'LOGOUT':
                 signOut(auth).catch(err => console.error(err));
                 state.user = {
@@ -81,6 +87,7 @@ export const store = {
                 };
                 window.router.navigate('/');
                 break;
+
             case 'LOGOUT_SILENT':
                 state.user = {
                     isLoggedIn: false,
@@ -90,6 +97,7 @@ export const store = {
                     uid: null
                 };
                 break;
+
             case 'SET_PRODUCTS':
                 state.products = action.payload;
                 break;
@@ -115,41 +123,31 @@ export const store = {
         };
 
         onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                try {
-                    const docSnap = await getDoc(doc(db, "users", user.uid));
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        this.dispatch({
-                            type: 'LOGIN',
-                            payload: {
-                                name: data.name,
-                                email: user.email,
-                                phone: data.phone,
-                                uid: user.uid,
-                                emailVerified: user.emailVerified
-                            }
-                        });
-                    } else {
-                        // Fallback if document doesn't exist
-                        this.dispatch({
-                            type: 'LOGIN',
-                            payload: {
-                                name: 'User',
-                                email: user.email,
-                                phone: null,
-                                uid: user.uid,
-                                emailVerified: user.emailVerified
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.error("Error fetching user data:", error);
-                } finally {
-                    completeInit();
-                }
-            } else {
+            if (!user) {
                 this.dispatch({ type: 'LOGOUT_SILENT' });
+                completeInit();
+                return;
+            }
+
+            try {
+                const docSnap = await getDoc(doc(db, "users", user.uid));
+                let userData = {
+                    name: 'User',
+                    email: user.email,
+                    phone: null,
+                    uid: user.uid
+                };
+
+                if (docSnap.exists()) {
+                    userData = { ...userData, ...docSnap.data() };
+                }
+
+                this.dispatch({ type: 'LOGIN', payload: userData });
+
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+                this.dispatch({ type: 'LOGOUT_SILENT' });
+            } finally {
                 completeInit();
             }
         });
