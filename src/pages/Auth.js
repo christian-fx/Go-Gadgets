@@ -157,13 +157,25 @@ export function onAuthMount() {
   const translateAuthError = (error) => {
     const code = error.code || '';
     switch (code) {
-      case 'auth/user-not-found': return 'No account found with this email.';
-      case 'auth/wrong-password': return 'Incorrect password.';
-      case 'auth/email-already-in-use': return 'Email already in use.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential': return 'Incorrect email or password.';
+      case 'auth/email-already-in-use': return 'An account with this email already exists.';
       case 'auth/weak-password': return 'Password too weak (min 6 chars).';
       case 'auth/invalid-email': return 'Invalid email address.';
-      default: return 'Unexpected error. Try again.';
+      case 'auth/too-many-requests': return 'Too many attempts. Please try again later.';
+      case 'auth/network-request-failed': return 'Network error. Check your connection.';
+      case 'auth/popup-closed-by-user': return 'Google sign-in was cancelled.';
+      default: return `Unexpected error: ${code || error.message || 'Try again.'}`;
     }
+  };
+
+  // Helper: Show alert with styling
+  const showAlert = (message, isError = true) => {
+    authAlert.textContent = message;
+    authAlert.className = isError
+      ? 'mb-6 p-4 rounded-md text-sm font-medium bg-red-50 text-red-800 border border-red-200'
+      : 'mb-6 p-4 rounded-md text-sm font-medium bg-green-50 text-green-800 border border-green-200';
   };
 
   // Tab Switching
@@ -218,7 +230,7 @@ export function onAuthMount() {
     const email = formData.get('email');
     const password = formData.get('password');
 
-    authAlert.classList.add('hidden');
+    authAlert.className = 'hidden';
 
     if (isSignUpMode) {
       const name = formData.get('name');
@@ -226,14 +238,12 @@ export function onAuthMount() {
       const confirmPassword = formData.get('confirm-password');
 
       if (password !== confirmPassword) {
-        authAlert.textContent = 'Passwords do not match.';
-        authAlert.classList.remove('hidden');
+        showAlert('Passwords do not match.');
         return;
       }
 
       if (password.length < 6) {
-        authAlert.textContent = 'Password must be at least 6 characters.';
-        authAlert.classList.remove('hidden');
+        showAlert('Password must be at least 6 characters.');
         return;
       }
 
@@ -257,8 +267,7 @@ export function onAuthMount() {
         store.dispatch({ type: 'LOGIN', payload: { name, email, phone, uid: user.uid } });
         window.router.navigate('/account');
       } catch (error) {
-        authAlert.textContent = translateAuthError(error);
-        authAlert.classList.remove('hidden');
+        showAlert(translateAuthError(error));
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign Up with Email';
       }
@@ -272,8 +281,7 @@ export function onAuthMount() {
         await signInWithEmailAndPassword(auth, email, password);
         window.router.navigate('/account');
       } catch (error) {
-        authAlert.textContent = translateAuthError(error);
-        authAlert.classList.remove('hidden');
+        showAlert(translateAuthError(error));
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign In with Email';
       }
@@ -287,11 +295,9 @@ export function onAuthMount() {
     if (!email) return;
     try {
       await sendPasswordResetEmail(auth, email);
-      authAlert.textContent = 'Password reset email sent!';
-      authAlert.classList.remove('hidden');
+      showAlert('Password reset email sent! Check your inbox.', false);
     } catch (error) {
-      authAlert.textContent = translateAuthError(error);
-      authAlert.classList.remove('hidden');
+      showAlert(translateAuthError(error));
     }
   });
 
@@ -319,8 +325,7 @@ export function onAuthMount() {
 
         window.router.navigate('/account');
       } catch (error) {
-        authAlert.textContent = translateAuthError(error);
-        authAlert.classList.remove('hidden');
+        showAlert(translateAuthError(error));
       }
     });
   }
