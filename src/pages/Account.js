@@ -5,6 +5,9 @@ import { store } from '../store.js';
 import { db, auth } from '../api/firebase-config.js';
 import { collection, query, where, getDocs, doc, updateDoc, getDoc, onSnapshot, arrayUnion, arrayRemove } from "firebase/firestore";
 
+// Module-level unsubscribe reference — prevents listener accumulation on re-visits
+let unsubscribeOrders = null;
+
 export async function renderAccount() {
   const state = store.getState();
   const user = state.user;
@@ -311,6 +314,12 @@ export async function renderAccount() {
 }
 
 export function onAccountMount() {
+  // Clean up any previous orders listener before creating a new one
+  if (unsubscribeOrders) {
+    unsubscribeOrders();
+    unsubscribeOrders = null;
+  }
+
   const state = store.getState();
   if (!state.user.isLoggedIn) return; // Already redirecting
 
@@ -395,7 +404,7 @@ export function onAccountMount() {
   const uid = auth.currentUser?.uid || state.user?.uid;
   if (uid) {
     const q = query(collection(db, "orders"), where("customerId", "==", uid));
-    onSnapshot(q, (snapshot) => {
+    unsubscribeOrders = onSnapshot(q, (snapshot) => {
       const orders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       const container = document.getElementById('orders-container');
       if (container) {
